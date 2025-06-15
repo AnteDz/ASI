@@ -4,7 +4,7 @@ car_prices_raw:
   load_args:
     encoding: 'utf-8'
 
-car_prices_cleand:
+clean_df:
   type: pandas.CSVDataset
   filepath: data/02_intermediate/clean_dataset.csv
   fs_args:
