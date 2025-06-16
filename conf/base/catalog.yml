@@ -33,3 +33,23 @@ price_target:
       encoding: 'utf-8'
   save_args:
     index: False
+
+model_metrics:
+  type: pandas.CSVDataset
+  filepath: data/06_models/metrics.csv
+  fs_args:
+    open_args_save:
+      mode: 'w'
+      encoding: 'utf-8'
+  save_args:
+    index: False
+
+final_model_metrics:
+  type: pandas.CSVDataset
+  filepath: data/07_model_output/metrics_final.csv
+  fs_args:
+    open_args_save:
+      mode: 'w'
+      encoding: 'utf-8'
+  save_args:
+    index: False

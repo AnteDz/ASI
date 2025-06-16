@@ -4,7 +4,9 @@ test_size: 0.2
 random_state: 42
 ag_label: "price"
 ag_output_path: "data/06_models/autogluon/"
-time_limit: 3600
+time_limit: 600
 presets:
   - best_quality
-eval_metric: "root_mean_squared_error"
+eval_metric: 'rmse'
+save_path: 'data/06_models/car_price_predictor'
+save_path_final: 'data/07_model_output/car_price_predictor_final'
