@@ -1,81 +1,86 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import KFold
 
 
 def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, encoding='utf-8')
-    # Usuwamy dowolne kolumny zaczynające się od "Unnamed"
-    df = df.drop(columns=[c for c in df.columns if c.lower().startswith("unnamed")],
-                 errors="ignore")
+    df = df.drop(columns=[c for c in df.columns if c.lower().startswith("unnamed")], errors="ignore")
     return df
 
+
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Oczyszcza dane samochodów:
-      - Usuwa kolumny 'Unnamed: 0' i 'province'
-      - Filtruje tylko rekordy z paliwem Gasoline i Diesel, mapuje na 0/1
-      - Usuwa outliery cen i przebiegów
-      - Filtruje lata między 1990 a 2025
-      - Usuwa duplikaty
-      - Przetwarza 'generation_name':
-          * wypełnia NaN jako 'unknown'
-          * usuwa prefix 'gen-'
-          * grupuje rzadkie generacje (<1% próby) jako 'other'
-          * koduje label encodingiem
-    """
     df = df.copy()
-
-    # 1) Drop unwanted columns
     df.drop(columns=["province"], errors="ignore", inplace=True)
-
-    # 2) Keep original fuel for frontend, then filter & encode
-    df['fuel_type'] = df['fuel']  # kopiujemy oryginał
+    df['fuel_type'] = df['fuel']
     df = df[df['fuel_type'].isin(['Gasoline', 'Diesel'])].copy()
-    df['fuel_encoded'] = df['fuel_type'].map({  # kolumna numeryczna do modelu
-        'Gasoline': 0,
-        'Diesel': 1
-    })
-
-    # 3) Filter price and mileage outliers
+    df['fuel_encoded'] = df['fuel_type'].map({'Gasoline': 0, 'Diesel': 1})
     df = df[df['price'].between(10000, 300000)]
     df = df[df['mileage'].between(2000, 300000)]
-
-    # 4) Filter production year
     df = df[df['year'].between(1990, 2025)]
-
-    # 5) Drop exact duplicates
     df.drop_duplicates(inplace=True)
-
-    # 6) Process generation_name
     df['generation_name'] = df['generation_name'].fillna('unknown')
     df['generation_name'] = df['generation_name'].str.replace(r'^gen-', '', regex=True)
-
-    # 6a) Group rare categories (<1%)
     freq = df['generation_name'].value_counts(normalize=True)
     rare = freq[freq < 0.01].index
-    df['generation_name_grouped'] = df['generation_name'].where(
-        ~df['generation_name'].isin(rare), 'other'
-    )
-
-    # 6b) Label encode grouped generations
+    df['generation_name_grouped'] = df['generation_name'].where(~df['generation_name'].isin(rare), 'other')
     le = LabelEncoder()
     df['generation_name_encoded'] = le.fit_transform(df['generation_name_grouped'])
-
-    # 6c) (opcjonalnie) Zapisz mapping do frontend
-    # mapping = dict(zip(le.classes_, le.transform(le.classes_)))
-    # pd.Series(mapping).to_csv("data/02_intermediate/generation_mapping.csv")
-
-    # 6d) Drop intermediate column
     df.drop(columns=['generation_name_grouped'], inplace=True)
+    return df
 
+
+def extract_target(df: pd.DataFrame):
+    target = df[['price']].copy()
+    features = df.drop(columns=['price'])
+    return features, target
+
+
+def create_numerical_features(df: pd.DataFrame, current_year: int) -> pd.DataFrame:
+    df = df.copy()
+    df['age'] = current_year - df['year']
+    df['mileage_per_year'] = df['mileage'] / df['age'].replace(0, np.nan)
+    df['log_mileage'] = np.log1p(df['mileage'])
+    return df
+
+
+def scale_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    scaler = StandardScaler()
+    num_cols = ['age', 'mileage', 'mileage_per_year', 'vol_engine', 'log_mileage']
+    df[num_cols] = scaler.fit_transform(df[num_cols])
+    return df
+
+
+def encode_categoricals(
+    df: pd.DataFrame,
+    top_marks: int = 20,
+    top_cities: int = 30,
+    n_splits: int = 5,
+    random_state: int = 42
+) -> pd.DataFrame:
+    df = df.copy()
+    top_marks_list = df['mark'].value_counts().index[:top_marks]
+    df['mark_group'] = df['mark'].where(df['mark'].isin(top_marks_list), 'other_mark')
+    df = pd.get_dummies(df, columns=['mark_group'], prefix='mark')
+    top_cities_list = df['city'].value_counts().index[:top_cities]
+    df['city_group'] = df['city'].where(df['city'].isin(top_cities_list), 'other_city')
+    df = pd.get_dummies(df, columns=['city_group'], prefix='city')
+    df['model_te'] = np.nan
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+    for train_idx, valid_idx in kf.split(df):
+        train, valid = df.iloc[train_idx], df.iloc[valid_idx]
+        means = train.groupby('model')['price'].mean()
+        df.loc[df.index[valid_idx], 'model_te'] = df.loc[df.index[valid_idx], 'model'].map(means)
+    df['model_te'].fillna(df['price'].mean(), inplace=True)
+    df = pd.get_dummies(df, columns=['generation_name_encoded'], prefix='gen')
     return df
 
 
 def feature_engineering(df: pd.DataFrame, current_year: int) -> pd.DataFrame:
-    df = df.copy()
-    df["age"] = current_year - df["year"]
-    df["log_mileage"] = np.log1p(df["mileage"])
-    cat_cols = [c for c in ["mark","model","generation_name","fuel","province"] if c in df.columns]
-    df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
-    return df.drop(columns=["year","mileage"], errors="ignore")
+    df = create_numerical_features(df, current_year)
+    df = scale_features(df)
+    df = encode_categoricals(df)
+    drop_cols = ['year', 'mileage', 'mark', 'model', 'city', 'generation_name', 'fuel', 'fuel_type']
+    return df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')

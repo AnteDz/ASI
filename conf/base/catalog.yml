@@ -23,3 +23,13 @@ features_df:
       encoding: 'utf-8'
   save_args:
     index: False
+
+price_target:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/price_target.csv
+  fs_args:
+    open_args_save:
+      mode: 'w'
+      encoding: 'utf-8'
+  save_args:
+    index: False

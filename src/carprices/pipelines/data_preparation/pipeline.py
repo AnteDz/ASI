@@ -1,5 +1,6 @@
 from kedro.pipeline import Pipeline, node
-from .nodes import load_data, clean_data, feature_engineering
+from .nodes import load_data, clean_data, extract_target, feature_engineering
+
 
 def create_pipeline(**kwargs) -> Pipeline:
     return Pipeline([
@@ -16,9 +17,15 @@ def create_pipeline(**kwargs) -> Pipeline:
             name="clean_data_node"
         ),
         node(
-            feature_engineering,
+            func=feature_engineering,
             inputs=["clean_df", "params:current_year"],
-            outputs="features_df",
+            outputs="features_with_price",
             name="feature_engineering_node"
+        ),
+        node(
+            func=extract_target,
+            inputs="features_with_price",
+            outputs=["features_df", "price_target"],
+            name="extract_target_node"
         ),
     ])
