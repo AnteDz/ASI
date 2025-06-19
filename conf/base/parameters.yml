@@ -10,3 +10,5 @@ presets:
 eval_metric: 'rmse'
 save_path: 'data/06_models/car_price_predictor'
 save_path_final: 'data/07_model_output/car_price_predictor_final'
+top_marks: 20
+top_cities: 30

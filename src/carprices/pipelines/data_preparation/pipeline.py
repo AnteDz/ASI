@@ -1,6 +1,13 @@
 from kedro.pipeline import Pipeline, node
-from .nodes import load_data, clean_data, extract_target, feature_engineering
-
+from .nodes import (
+    load_data,
+    clean_data,
+    create_numerical_features,
+    scale_features,
+    encode_categoricals,
+    save_preprocessors,
+    extract_target
+)
 
 def create_pipeline(**kwargs) -> Pipeline:
     return Pipeline([
@@ -13,19 +20,44 @@ def create_pipeline(**kwargs) -> Pipeline:
         node(
             func=clean_data,
             inputs="raw_df",
-            outputs="clean_df",
+            outputs=["clean_df","gen_label_encoder"],
             name="clean_data_node"
         ),
         node(
-            func=feature_engineering,
-            inputs=["clean_df", "params:current_year"],
-            outputs="features_with_price",
-            name="feature_engineering_node"
+            func=create_numerical_features,
+            inputs=["clean_df","params:current_year"],
+            outputs="num_df",
+            name="create_numeric_node"
+        ),
+        node(
+            func=scale_features,
+            inputs="num_df",
+            outputs=["scaled_df","scaler_obj"],
+            name="scale_features_node"
+        ),
+        node(
+            func=encode_categoricals,
+            inputs=["scaled_df","params:top_marks","params:top_cities"],
+            outputs=["features_with_price",
+                     "model_te_map",
+                     "top_marks_list",
+                     "top_cities_list"],
+            name="encode_categoricals_node"
+        ),
+        node(
+            func=save_preprocessors,
+            inputs=["scaler_obj",
+                    "gen_label_encoder",
+                    "model_te_map",
+                    "top_marks_list",
+                    "top_cities_list"],
+            outputs=None,
+            name="save_preprocessors_node"
         ),
         node(
             func=extract_target,
             inputs="features_with_price",
-            outputs=["features_df", "price_target"],
+            outputs=["features_df","price_target"],
             name="extract_target_node"
         ),
     ])

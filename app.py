@@ -1,103 +1,102 @@
 import streamlit as st
-st.set_page_config(page_title="Car Price Predictor", layout="wide")
-
 import pandas as pd
+import numpy as np
+import joblib
 from autogluon.tabular import TabularPredictor
 
-from src.carprices.pipelines.data_preparation.nodes import (
-    create_numerical_features,
-    scale_features,
+st.set_page_config(page_title="Car Price Predictor", layout="wide")
+
+raw = pd.read_csv("data/01_raw/Car_Prices_Poland_Kaggle.csv", encoding="utf-8")
+raw.drop(
+    columns=[c for c in raw.columns if c.lower().startswith("unnamed")] + ["province"],
+    errors="ignore",
+    inplace=True
 )
 
-def inference_clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.drop(columns=['province'], errors='ignore', inplace=True)
-    df['fuel_type'] = df['fuel']
-    df = df[df['fuel_type'].isin(['Gasoline','Diesel'])].copy()
-    df['fuel_encoded'] = df['fuel_type'].map({'Gasoline':0,'Diesel':1})
-    df['generation_name'] = df['generation_name'].fillna('unknown')
-    df['generation_name'] = df['generation_name'].str.replace(r'^gen-', '', regex=True)
-    return df
+all_marks = sorted(raw["mark"].dropna().unique())
+model_map = raw.groupby("mark")["model"].apply(lambda s: sorted(s.dropna().unique())).to_dict()
+gen_map = raw.groupby("model")["generation_name"] \
+    .apply(lambda s: sorted(s.dropna().str.replace(r"^gen-", "", regex=True).unique())) \
+    .to_dict()
+all_cities = sorted(raw["city"].dropna().unique())
 
-def encode_inference(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    top_marks = [
-        'audi','bmw','citroen','fiat','ford','honda','hyundai','kia','mazda',
-        'mercedes-benz','mini','nissan','opel','other_mark','peugeot','renault',
-        'seat','skoda','toyota','volkswagen','volvo'
-    ]
-    df['mark_group'] = df['mark'].where(df['mark'].isin(top_marks), 'other_mark')
-    df = pd.get_dummies(df, columns=['mark_group'], prefix='mark')
-
-    top_cities = [
-        'Białystok','Bielany Wrocławskie','Bydgoszcz','Częstochowa','Elbląg',
-        'Gdańsk','Gdynia','Gliwice','Gniezno','Katowice','Kielce','Kraków',
-        'Kutno','Lublin','Mysłowice','Nowy Sącz','Olsztyn','Ostrów Mazowiecka',
-        'Piaseczno','Poznań','Płock','Radom','Rybnik','Rzeszów','Szczecin',
-        'Warszawa','Wrocław','Wągrowiec','Zabrze','Łódź'
-    ]
-    df['city_group'] = df['city'].where(df['city'].isin(top_cities), 'other_city')
-    df = pd.get_dummies(df, columns=['city_group'], prefix='city')
-
-    df['gen_group'] = df['generation_name']
-    df = pd.get_dummies(df, columns=['gen_group'], prefix='gen')
-    raw = pd.read_csv("data/02_intermediate/clean_dataset.csv", usecols=['price'])
-    df['model_te'] = raw['price'].mean()
-    return df
 
 @st.cache_resource
-def load_predictor(path: str) -> TabularPredictor:
+def load_preprocessors(path="data/06_models/preprocessors.pkl"):
+    return joblib.load(path)
+
+
+preproc = load_preprocessors()
+scaler = preproc["scaler"]
+gen_le = preproc["gen_le"]
+model_te_map = preproc["model_te_map"]
+top_marks = preproc["top_marks"]
+top_cities = preproc["top_cities"]
+
+
+@st.cache_resource
+def load_predictor(path="data/07_model_output/car_price_predictor_final"):
     return TabularPredictor.load(path)
 
-predictor = load_predictor("data/07_model_output/car_price_predictor_final")
 
-template_cols = list(
-    pd.read_csv("data/02_intermediate/features.csv", nrows=0).columns
-)
+predictor = load_predictor()
+
+template_cols = list(pd.read_csv("data/02_intermediate/features.csv", nrows=0).columns)
 
 st.title("🛻 Car Price Predictor")
-mode = st.radio("Wybierz tryb:", ["Pojedyncze auto","Batch CSV"])
 
-if mode == "Pojedyncze auto":
-    st.subheader("Wprowadź dane samochodu:")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        mark = st.selectbox("Marka", ["audi","bmw","mercedes-benz","other_mark"])
-        model = st.text_input("Model","")
-        year = st.number_input("Rok produkcji",1990,2025,2015)
-    with c2:
-        mileage = st.number_input("Przebieg [km]",2000,300000,50000)
-        vol = st.number_input("Pojemność silnika [cc]",400,6600,2000)
-        fuel = st.selectbox("Paliwo",["Gasoline","Diesel"])
-    with c3:
-        gen = st.text_input("Generation name","unknown")
-        city = st.text_input("Miasto","other_city")
-    if st.button("Oblicz cenę"):
-        df_raw = pd.DataFrame([{
-            'mark':mark,'model':model,'year':year,
-            'mileage':mileage,'vol_engine':vol,
-            'fuel':fuel,'generation_name':gen,'city':city
-        }])
-        df_c = inference_clean_data(df_raw)
-        df_n = create_numerical_features(df_c, current_year=2025)
-        df_s = scale_features(df_n)
-        df_e = encode_inference(df_s)
-        X_inf = df_e.drop(columns=[
-            'year','mileage','mark','model','city','generation_name','fuel','fuel_type'
-        ], errors='ignore').reindex(columns=template_cols, fill_value=0)
-        price = predictor.predict(X_inf).iloc[0]
-        st.success(f"Przewidywana cena: {price:,.0f} PLN")
+st.subheader("Wprowadź dane samochodu:")
+c1, c2, c3 = st.columns(3)
+with c1:
+    mark = st.selectbox("Marka", all_marks)
+    model = st.selectbox("Model", model_map.get(mark, ["unknown"]))
+    year = st.number_input("Rok produkcji", 1990, 2025, 2015)
+with c2:
+    mileage = st.number_input("Przebieg [km]", 2000, 300000, 50000)
+    vol = st.number_input("Pojemność silnika", 400, 6000, 2000)
+    fuel = st.selectbox("Paliwo", ["Gasoline", "Diesel"])
+with c3:
+    gen = st.selectbox("Generacja", gen_map.get(model, ["unknown"]))
+    city = st.selectbox("Miasto", all_cities)
 
-else:
-    st.subheader("Batch: wgraj features_df.csv")
-    up = st.file_uploader("Wybierz plik CSV", type="csv")
-    if up:
-        df = pd.read_csv(up)
-        df['predicted_price'] = predictor.predict(df)
-        st.write("### Wyniki predykcji:")
-        st.dataframe(df)
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇ Pobierz CSV", csv,
-                           file_name="predictions.csv",
-                           mime="text/csv")
+if st.button("Oblicz cenę"):
+    df = pd.DataFrame([{
+        "mark": mark,
+        "model": model,
+        "year": year,
+        "mileage": mileage,
+        "vol_engine": vol,
+        "fuel": fuel,
+        "generation_name": gen,
+        "city": city
+    }])
+
+    df["fuel_encoded"] = df["fuel"].map({"Gasoline": 0, "Diesel": 1})
+    df["generation_name"] = df["generation_name"].fillna("unknown")
+    df["age"] = 2025 - df["year"]
+    df["mileage_per_year"] = df["mileage"] / df["age"].replace(0, np.nan)
+    df["log_mileage"] = np.log1p(df["mileage"])
+
+    num_cols = ["age", "mileage", "mileage_per_year", "vol_engine", "log_mileage"]
+    df[num_cols] = scaler.transform(df[num_cols])
+
+    df["model_te"] = df["model"].map(model_te_map) \
+        .fillna(np.mean(list(model_te_map.values())))
+
+    df["mark_group"] = df["mark"].where(df["mark"].isin(top_marks), "other_mark")
+    df = pd.get_dummies(df, columns=["mark_group"], prefix="mark")
+
+    df["city_group"] = df["city"].where(df["city"].isin(top_cities), "other_city")
+    df = pd.get_dummies(df, columns=["city_group"], prefix="city")
+
+    raw_gen = df["generation_name"].str.replace(r"^gen-", "", regex=True).fillna("unknown")
+    gen_grouped = raw_gen.where(raw_gen.isin(gen_le.classes_), "other")
+    df["generation_name_encoded"] = gen_le.transform(gen_grouped)
+    df = pd.get_dummies(df, columns=["generation_name_encoded"], prefix="gen")
+
+    drop = ["mark", "model", "year", "mileage", "fuel", "city", "generation_name", "fuel_encoded"]
+    X_inf = df.drop(columns=drop, errors="ignore") \
+        .reindex(columns=template_cols, fill_value=0)
+
+    price = predictor.predict(X_inf).iloc[0]
+    st.success(f"Przewidywana cena: {price:,.0f} PLN")
