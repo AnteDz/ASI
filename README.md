@@ -1,100 +1,72 @@
-# carprices
+# Car Price Predictor
 
-[![Powered by Kedro](https://img.shields.io/badge/powered_by-kedro-ffc900?logo=kedro)](https://kedro.org)
+[![Powered by Kedro](https://img.shields.io/badge/powered_by-kedro-ffc900?logo=kedro)](https://kedro.org)  
+[![Built with Streamlit](https://img.shields.io/badge/built_with-Streamlit-FF4B4B?logo=streamlit)](https://streamlit.io)
 
 ## Overview
 
-This is your new Kedro project with PySpark setup, which was generated using `kedro 0.19.12`.
+Przewidywanie cen samochodów na podstawie danych z Kaggle, z wykorzystaniem frameworka Kedro do przygotowania danych, AutoGluon do AutoML oraz front-endu Streamlit do interaktywnej prezentacji wyników.
 
-Take a look at the [Kedro documentation](https://docs.kedro.org) to get started.
+W projekcie znajdziesz:
 
-## Rules and guidelines
+* **Data Preparation** (`src/carprices/pipelines/data_preparation/`): czyszczenie, inżynieria cech i zapisywanie artefaktów.  
+* **Model Training** (`src/carprices/pipelines/autogluon_pipeline/`): trening modeli AutoGluon, wybór najlepszego i jego ewaluacja.  
+* **Application** (`app.py`): interfejs użytkownika w Streamlit do predykcji pojedynczych aut.  
+* **Dockerfile**: konteneryzacja aplikacji Streamlit i zależności.  
 
-In order to get the best out of the template:
+## Prerequisites
 
-* Don't remove any lines from the `.gitignore` file we provide
-* Make sure your results can be reproduced by following a [data engineering convention](https://docs.kedro.org/en/stable/faq/faq.html#what-is-data-engineering-convention)
-* Don't commit data to your repository
-* Don't commit any credentials or your local configuration to your repository. Keep all your credentials and local configuration in `conf/local/`
+Wymagania dotyczące uruchomienia kodu:
 
-## How to install dependencies
+- **Python** 3.10, 3.11 or 3.12  
+- **Docker** (if you want to build/run the container)  
+- **Kedro** ≥ 0.19.12  
+- **Streamlit**, **AutoGluon**, **scikit-learn**, etc.  
 
-Declare any dependencies in `requirements.txt` for `pip` installation.
+## Quickstart (lokalnie)
 
-To install them, run:
+1. **Zainstaluj zależności**  
+   ```bash
+   pip install -r requirements.txt
 
-```
-pip install -r requirements.txt
-```
+## Quickstart (lokalnie)
 
-## How to run your Kedro pipeline
+1. **Zainstaluj zależności**
 
-You can run your Kedro project with:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```
-kedro run
-```
+2. **Uruchom Kedro pipeline**
 
-## How to test your Kedro project
+   ```bash
+   kedro run --pipeline data_preparation
+   kedro run --pipeline autogluon_pipeline
+   ```
 
-Have a look at the files `src/tests/test_run.py` and `src/tests/pipelines/data_science/test_pipeline.py` for instructions on how to write your tests. Run the tests as follows:
+3. **Otwórz aplikację Streamlit**
 
-```
-pytest
-```
+   ```bash
+   streamlit run app.py
+   ```
 
-To configure the coverage threshold, look at the `.coveragerc` file.
+4. Aplikacja dostępna pod adresem `http://localhost:8501`.
 
-## Project dependencies
+## Budowanie i uruchomienie w Dockerze
 
-To see and update the dependency requirements for your project use `requirements.txt`. Install the project requirements with `pip install -r requirements.txt`.
+1. **Zbuduj obraz**
 
-[Further information about project dependencies](https://docs.kedro.org/en/stable/kedro_project_setup/dependencies.html#project-specific-dependencies)
+   ```bash
+   docker build -t car-price-predictor:latest .
+   ```
+2. **Uruchom kontener lokalnie**
 
-## How to work with Kedro and notebooks
+   ```bash
+   docker run -p 8501:8501 car-price-predictor:latest
+   ```
+3. Aplikacja będzie dostępna pod `http://localhost:8501`.
 
-> Note: Using `kedro jupyter` or `kedro ipython` to run your notebook provides these variables in scope: `catalog`, `context`, `pipelines` and `session`.
->
-> Jupyter, JupyterLab, and IPython are already included in the project requirements by default, so once you have run `pip install -r requirements.txt` you will not need to take any extra steps before you use them.
+---
 
-### Jupyter
-To use Jupyter notebooks in your Kedro project, you need to install Jupyter:
-
-```
-pip install jupyter
-```
-
-After installing Jupyter, you can start a local notebook server:
-
-```
-kedro jupyter notebook
-```
-
-### JupyterLab
-To use JupyterLab, you need to install it:
-
-```
-pip install jupyterlab
-```
-
-You can also start JupyterLab:
-
-```
-kedro jupyter lab
-```
-
-### IPython
-And if you want to run an IPython session:
-
-```
-kedro ipython
-```
-
-### How to ignore notebook output cells in `git`
-To automatically strip out all output cell contents before committing to `git`, you can use tools like [`nbstripout`](https://github.com/kynan/nbstripout). For example, you can add a hook in `.git/config` with `nbstripout --install`. This will run `nbstripout` before anything is committed to `git`.
-
-> *Note:* Your output cells will be retained locally.
-
-## Package your Kedro project
-
-[Further information about building project documentation and packaging your project](https://docs.kedro.org/en/stable/tutorial/package_a_project.html)
+**Link do wdrożonej aplikacji:**
+ https://car-price-app-egf6ccgye3f5ehcp.polandcentral-01.azurewebsites.net/
