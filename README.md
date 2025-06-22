@@ -29,14 +29,6 @@ Wymagania dotyczące uruchomienia kodu:
    ```bash
    pip install -r requirements.txt
 
-## Quickstart (lokalnie)
-
-1. **Zainstaluj zależności**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
 2. **Uruchom Kedro pipeline**
 
    ```bash
